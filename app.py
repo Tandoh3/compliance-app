@@ -5,18 +5,26 @@ import spacy
 from spacy.cli import download as spacy_download
 import pandas as pd
 import streamlit as st
+import sys, subprocess
 
 # Cache the loaded spaCy model to speed up repeated runs
 def load_model():
     return spacy.load('en_core_web_sm')
 
 @st.cache_resource
+
+
+
 def get_nlp():
     try:
         return spacy.load("en_core_web_sm")
     except OSError:
-        # model wasn’t found—download it now
-        spacy_download("en_core_web_sm")
+        # install the wheel into the user’s local site‑packages
+        subprocess.run(
+            [sys.executable, "-m", "pip", "install", "--user", "en-core-web-sm"],
+            check=True
+        )
+        # now load from user site‑packages
         return spacy.load("en_core_web_sm")
 
 nlp = get_nlp()
