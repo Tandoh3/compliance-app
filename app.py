@@ -1,36 +1,17 @@
-import os
 import io
 import pdfplumber
 import spacy
-from spacy.cli import download as spacy_download
 import pandas as pd
 import streamlit as st
-import sys, subprocess
 
-# Cache the loaded spaCy model to speed up repeated runs
-def load_model():
-    return spacy.load('en_core_web_sm')
-
+# Initialize spaCy with a blank English model + sentencizer (no external downloads needed)
 @st.cache_resource
-
-
-
 def get_nlp():
-    try:
-        return spacy.load("en_core_web_sm")
-    except OSError:
-        # install the wheel into the user’s local site‑packages
-        subprocess.run(
-            [sys.executable, "-m", "pip", "install", "--user", "en-core-web-sm"],
-            check=True
-        )
-        # now load from user site‑packages
-        return spacy.load("en_core_web_sm")
+    nlp = spacy.blank("en")
+    nlp.add_pipe("sentencizer")
+    return nlp
 
-nlp = get_nlp()
-
-# Step 1: Extract Text from PDF using pdfplumber
-@st.cache_data
+# Extract text from PDF bytes
 def extract_text_from_pdf_bytes(pdf_bytes):
     text = ''
     with pdfplumber.open(io.BytesIO(pdf_bytes)) as pdf:
@@ -40,13 +21,12 @@ def extract_text_from_pdf_bytes(pdf_bytes):
                 text += page_text
     return text
 
-# Step 2: Tokenize text into sentences using spaCy
+# Tokenize into sentences
 def tokenize_sentences(text, nlp):
     doc = nlp(text)
-    sentences = [sent.text.strip() for sent in doc.sents]
-    return sentences
+    return [sent.text.strip() for sent in doc.sents]
 
-# Step 3: Create DataFrame for compliance checklist
+# Create compliance checklist DataFrame
 def make_checklist_df(sentences):
     return pd.DataFrame({
         'Compliance Point': sentences,
@@ -54,35 +34,29 @@ def make_checklist_df(sentences):
         'Comments': [''] * len(sentences)
     })
 
-# Build the Streamlit app
+# Streamlit UI
 st.set_page_config(page_title='PDF Compliance Checklist Generator', layout='wide')
 st.title('📄 Compliance Checklist Generator')
-st.markdown(
-    'Upload one or more PDF files to extract sentences and generate a compliance checklist in Excel format.'
-)
+st.markdown('Upload PDF files to extract sentences and generate a compliance checklist in Excel format.')
 
 nlp = get_nlp()
 
-uploaded_files = st.file_uploader(
-    'Choose PDF files', type=['pdf'], accept_multiple_files=True
-)
+uploaded_files = st.file_uploader('Choose PDF files', type=['pdf'], accept_multiple_files=True)
 
 if uploaded_files:
     st.success(f'{len(uploaded_files)} file(s) uploaded.')
-    all_results = []
-
+    results = []
     for pdf_file in uploaded_files:
         with st.spinner(f'Processing {pdf_file.name}...'):
             pdf_bytes = pdf_file.read()
             text = extract_text_from_pdf_bytes(pdf_bytes)
             sentences = tokenize_sentences(text, nlp)
             df = make_checklist_df(sentences)
-            all_results.append((pdf_file.name, df))
+            results.append((pdf_file.name, df))
 
-    for filename, df in all_results:
+    for filename, df in results:
         st.subheader(f'Preview: {filename}')
         st.dataframe(df.head(10), use_container_width=True)
-        # Convert to Excel in-memory
         towrite = io.BytesIO()
         with pd.ExcelWriter(towrite, engine='openpyxl') as writer:
             df.to_excel(writer, index=False, sheet_name='Checklist')
@@ -94,13 +68,11 @@ if uploaded_files:
             file_name=download_name,
             mime='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
         )
-
 else:
     st.info('📥 Please upload at least one PDF to get started.')
 
+# Sidebar info
 st.sidebar.markdown('---')
 st.sidebar.header('About')
-st.sidebar.write(
-    'This app extracts text from PDFs, splits into sentences using spaCy, and generates an Excel checklist for manual compliance review.'
-)
+st.sidebar.write('Extracts text from PDFs, splits into sentences, and generates an Excel checklist for compliance review.')
 st.sidebar.write('© 2025 Compliance Checker')
