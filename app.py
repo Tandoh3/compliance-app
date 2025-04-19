@@ -2,6 +2,7 @@ import os
 import io
 import pdfplumber
 import spacy
+from spacy.cli import download as spacy_download
 import pandas as pd
 import streamlit as st
 
@@ -11,7 +12,14 @@ def load_model():
 
 @st.cache_resource
 def get_nlp():
-    return load_model()
+    try:
+        return spacy.load("en_core_web_sm")
+    except OSError:
+        # model wasn’t found—download it now
+        spacy_download("en_core_web_sm")
+        return spacy.load("en_core_web_sm")
+
+nlp = get_nlp()
 
 # Step 1: Extract Text from PDF using pdfplumber
 @st.cache_data
